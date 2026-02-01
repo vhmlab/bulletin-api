@@ -5,11 +5,12 @@ from database import get_db
 from schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate
 from crud import (
     create_service_entry,
-    get_service_entry,
     get_service_entries,
     get_service_entries_by_date,
     update_service_entry,
     delete_service_entry,
+    update_service_entries_by_date,
+    delete_service_entries_by_date,
     update_service_field_by_date,
 )
 from auth import get_current_user
@@ -44,20 +45,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         entries = get_service_entries(db, service_type, skip=skip, limit=limit)
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in entries]
     
-    @router.get("/{entry_id}", response_model=ServiceResponse)
-    def read_entry(
-        entry_id: int,
-        db: Session = Depends(get_db),
-        current_user: str = Depends(get_current_user)
-    ):
-        """Get a specific service entry by ID"""
-        entry = get_service_entry(db, service_type, entry_id)
-        if entry is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Entry with id {entry_id} not found"
-            )
-        return {"id": entry.id, "date": entry.date, "data": json.loads(entry.data) if entry.data else []}
+    # Note: no short alias route here; use /by-date/{date} for date-based queries
     
     @router.get("/by-date/{date}", response_model=List[ServiceResponse])
     def read_entries_by_date(
@@ -80,34 +68,34 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         updated = update_service_field_by_date(db, service_type, date, field_update.field, field_update.value)
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]
     
-    @router.put("/{entry_id}", response_model=ServiceResponse)
-    def update_entry(
-        entry_id: int,
+    @router.put("/by-date/{date}", response_model=List[ServiceResponse])
+    def update_entries_by_date(
+        date: str,
         service: ServiceUpdate,
         db: Session = Depends(get_db),
         current_user: str = Depends(get_current_user)
     ):
-        """Update a service entry"""
-        entry = update_service_entry(db, service_type, entry_id, service)
-        if entry is None:
+        """Update all service entries matching `date`."""
+        updated = update_service_entries_by_date(db, service_type, date, service)
+        if not updated:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Entry with id {entry_id} not found"
+                detail=f"No entries found for date {date}"
             )
-        return {"id": entry.id, "date": entry.date, "data": json.loads(entry.data) if entry.data else []}
+        return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]
     
-    @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_entry(
-        entry_id: int,
+    @router.delete("/by-date/{date}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_entries_by_date(
+        date: str,
         db: Session = Depends(get_db),
         current_user: str = Depends(get_current_user)
     ):
-        """Delete a service entry"""
-        success = delete_service_entry(db, service_type, entry_id)
-        if not success:
+        """Delete all service entries matching `date`."""
+        count = delete_service_entries_by_date(db, service_type, date)
+        if count == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Entry with id {entry_id} not found"
+                detail=f"No entries found for date {date}"
             )
         return None
     

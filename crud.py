@@ -146,3 +146,55 @@ def update_service_field_by_date(
         db.refresh(e)
 
     return updated
+
+
+def update_service_entries_by_date(
+    db: Session, service_type: str, date: str, service_data: ServiceUpdate
+):
+    """Update all entries matching `date` with fields from `service_data`.
+
+    Returns list of updated entries.
+    """
+    model = get_service_model(service_type)
+    if not model:
+        return []
+
+    entries = db.query(model).filter(model.date == date).all()
+    if not entries:
+        return []
+
+    update_data = service_data.model_dump(exclude_unset=True)
+    updated = []
+    for entry in entries:
+        for key, value in update_data.items():
+            if key == "data":
+                entry.data = json.dumps(value)
+            else:
+                setattr(entry, key, value)
+        db.add(entry)
+        updated.append(entry)
+
+    db.commit()
+    for e in updated:
+        db.refresh(e)
+
+    return updated
+
+
+def delete_service_entries_by_date(db: Session, service_type: str, date: str):
+    """Delete all entries matching `date`. Returns number of deleted rows."""
+    model = get_service_model(service_type)
+    if not model:
+        return 0
+
+    entries = db.query(model).filter(model.date == date).all()
+    if not entries:
+        return 0
+
+    count = 0
+    for entry in entries:
+        db.delete(entry)
+        count += 1
+
+    db.commit()
+    return count
