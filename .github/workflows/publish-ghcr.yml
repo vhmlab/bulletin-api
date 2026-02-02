@@ -37,8 +37,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/boletin-api:latest
-            ghcr.io/${{ github.repository_owner }}/boletin-api:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/bulletin-api:latest
+            ghcr.io/${{ github.repository_owner }}/bulletin-api:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
