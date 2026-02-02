@@ -47,7 +47,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
     
     # Note: no short alias route here; use /by-date/{date} for date-based queries
     
-    @router.get("/by-date/{date}", response_model=List[ServiceResponse])
+    @router.get("/by-date/{date:path}", response_model=List[ServiceResponse])
     def read_entries_by_date(
         date: str,
         db: Session = Depends(get_db),
@@ -57,7 +57,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         entries = get_service_entries_by_date(db, service_type, date)
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in entries]
 
-    @router.patch("/by-date/{date}/field", response_model=List[ServiceResponse])
+    @router.patch("/by-date/{date:path}/field", response_model=List[ServiceResponse])
     def update_field_by_date(
         date: str,
         field_update: FieldUpdate,
@@ -81,7 +81,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         updated = result.get("updated", [])
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]
     
-    @router.put("/by-date/{date}", response_model=List[ServiceResponse])
+    @router.put("/by-date/{date:path}", response_model=List[ServiceResponse])
     def update_entries_by_date(
         date: str,
         service: ServiceUpdate,
@@ -97,7 +97,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
             )
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]
     
-    @router.delete("/by-date/{date}", status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete("/by-date/{date:path}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_entries_by_date(
         date: str,
         db: Session = Depends(get_db),

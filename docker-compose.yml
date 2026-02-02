@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DISABLE_AUTH=true
+      - DATABASE_URL=sqlite:///./boletin.db
+    volumes:
+      - ./:/app:delegated
+    # Use the image CMD (python -m uvicorn ...) defined in the Dockerfile
