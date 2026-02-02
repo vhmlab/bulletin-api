@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from database import get_db
-from schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate
-from crud import (
+from .database import get_db
+from .schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate
+from .crud import (
     create_service_entry,
     get_service_entries,
     get_service_entries_by_date,
@@ -13,7 +13,7 @@ from crud import (
     delete_service_entries_by_date,
     update_service_field_by_date,
 )
-from auth import get_current_user
+from .auth import get_current_user
 import json
 
 

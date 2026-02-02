@@ -12,3 +12,8 @@ ENV/
 .DS_Store
 .idea/
 .vscode/
+
+# Runtime logs and pid
+server_live.log
+uvicorn.log
+uvicorn.pid

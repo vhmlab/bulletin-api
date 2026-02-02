@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Type, Any
 import json
 
-from database import SabbathSchool, WorshipService, YouthService, WednesdayService
-from schemas import ServiceCreate, ServiceUpdate
+from .database import SabbathSchool, WorshipService, YouthService, WednesdayService
+from .schemas import ServiceCreate, ServiceUpdate
 
 
 def get_service_model(service_type: str) -> Type:
