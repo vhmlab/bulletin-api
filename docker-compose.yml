@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "18010:18010"
     environment:
       - DISABLE_AUTH=true
       - DATABASE_URL=sqlite:///./boletin.db

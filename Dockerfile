@@ -36,10 +36,10 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY --from=builder /install/app /app
 
-EXPOSE 18002
+EXPOSE 18010
 
 # Ensure Python finds packages installed into /usr/local
 ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages:/usr/local/lib/python3.11/dist-packages
 
 # Distroless image already provides `python` as the entrypoint; pass module args directly
-CMD ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "18002"]
+CMD ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "18010"]
