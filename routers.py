@@ -65,7 +65,20 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         current_user: str = Depends(get_current_user)
     ):
         """Update a specific JSON field inside the `data` column for entries matching `date`."""
-        updated = update_service_field_by_date(db, service_type, date, field_update.field, field_update.value)
+        result = update_service_field_by_date(db, service_type, date, field_update.field, field_update.value)
+        # Defensive checks in case the CRUD function returned an unexpected value
+        if result is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error updating field")
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected result type from update: {type(result)}")
+
+        # result is a dict: {updated, date_found, field_found}
+        if not result.get("date_found"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entries found for date {date}")
+        if not result.get("field_found"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Field '{field_update.field}' not found for date {date}")
+
+        updated = result.get("updated", [])
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]
     
     @router.put("/by-date/{date}", response_model=List[ServiceResponse])

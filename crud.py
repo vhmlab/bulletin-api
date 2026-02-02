@@ -118,34 +118,95 @@ def update_service_field_by_date(
 
     entries = db.query(model).filter(model.date == date).all()
     if not entries:
-        return []
-
-    def set_nested(d: dict, path: list, val: Any):
-        cur = d
-        for p in path[:-1]:
-            if p not in cur or not isinstance(cur[p], dict):
-                cur[p] = {}
-            cur = cur[p]
-        cur[path[-1]] = val
+        return {"updated": [], "date_found": False, "field_found": False}
 
     path_parts = [p for p in field_path.split('.') if p]
+
+    # If the field_path is a single non-numeric token, treat it as the name
+    # of an element inside the top-level list (`data`) and set its `value`.
+    is_name_lookup = len(path_parts) == 1 and not path_parts[0].isdigit()
+
+    def exists_nested(obj: Any, parts: list) -> bool:
+        cur = obj
+        for p in parts:
+            if p.isdigit():
+                if not isinstance(cur, list):
+                    return False
+                idx = int(p)
+                if idx < 0 or idx >= len(cur):
+                    return False
+                cur = cur[idx]
+            else:
+                if not isinstance(cur, dict):
+                    return False
+                if p not in cur:
+                    return False
+                cur = cur[p]
+        return True
+
+    def set_nested_if_exists(d: Any, parts: list, val: Any):
+        # Only set if the full path exists; traverse and set the leaf
+        cur = d
+        for i, p in enumerate(parts):
+            last = (i == len(parts) - 1)
+            if p.isdigit():
+                idx = int(p)
+                if not isinstance(cur, list) or idx < 0 or idx >= len(cur):
+                    return False
+                if last:
+                    cur[idx] = val
+                    return True
+                cur = cur[idx]
+            else:
+                if not isinstance(cur, dict) or p not in cur:
+                    return False
+                if last:
+                    cur[p] = val
+                    return True
+                cur = cur[p]
+        return False
+
+    field_found_any = False
     updated = []
     for entry in entries:
         try:
-            data_obj = json.loads(entry.data) if entry.data else {}
+            data_obj = json.loads(entry.data) if entry.data else []
         except Exception:
-            data_obj = {}
+            data_obj = []
 
-        set_nested(data_obj, path_parts, value)
-        entry.data = json.dumps(data_obj)
-        db.add(entry)
-        updated.append(entry)
+        # Name-based lookup: search list items for a dict with matching "name" and set its "value"
+        if is_name_lookup:
+            found_in_entry = False
+            if isinstance(data_obj, list):
+                for item in data_obj:
+                    if isinstance(item, dict) and item.get("name") == path_parts[0]:
+                        item["value"] = value
+                        found_in_entry = True
+            if found_in_entry:
+                field_found_any = True
+                entry.data = json.dumps(data_obj)
+                db.add(entry)
+                updated.append(entry)
+            continue
+
+        # Fallback: path-based nested update
+        if exists_nested(data_obj, path_parts):
+            field_found_any = True
+            ok = set_nested_if_exists(data_obj, path_parts, value)
+            if ok:
+                entry.data = json.dumps(data_obj)
+                db.add(entry)
+                updated.append(entry)
+
+    if not field_found_any:
+        # date exists but field not found in any entry
+        return {"updated": [], "date_found": True, "field_found": False}
 
     db.commit()
     for e in updated:
         db.refresh(e)
 
-    return updated
+    return {"updated": updated, "date_found": True, "field_found": True}
 
 
 def update_service_entries_by_date(
