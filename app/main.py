@@ -89,6 +89,12 @@ def logout():
 	return {"message": "Logged out successfully. Please delete your access token."}
 
 
+@app.get("/health")
+def health():
+	"""Simple health check endpoint for orchestration and load balancers."""
+	return {"status": "ok"}
+
+
 if __name__ == "__main__":
 	import uvicorn
 	uvicorn.run(app, host="0.0.0.0", port=8000)

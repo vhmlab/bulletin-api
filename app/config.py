@@ -1,7 +1,14 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Allow overriding the .env location via the DOTENV_PATH environment variable.
+# If DOTENV_PATH is set, load that file; otherwise fall back to default behaviour
+# (which searches for a .env in the current working directory).
+dotenv_path = os.environ.get("DOTENV_PATH")
+if dotenv_path:
+    load_dotenv(dotenv_path=dotenv_path)
+else:
+    load_dotenv()
 
 class Settings:
     DISABLE_AUTH: bool = os.getenv("DISABLE_AUTH", "false").lower() == "true"
