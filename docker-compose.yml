@@ -5,11 +5,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "18010:18010"
-    environment:
-      - DISABLE_AUTH=true
-      - DATABASE_URL=sqlite:///./boletin.db
     volumes:
       - ./:/app:delegated
-    # Use the image CMD (python -m uvicorn ...) defined in the Dockerfile
+      - ./boletin.db:/app/boletin.db:ro
+    environment:
+      - DATABASE_URL=sqlite:///./boletin.db
+    ports:
+      - "18010:18010"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 18010 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:18010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

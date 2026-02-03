@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth
 from .config import settings
 from .schemas import TokenData

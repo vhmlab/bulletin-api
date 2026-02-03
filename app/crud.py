@@ -1,151 +1,129 @@
-from sqlalchemy.orm import Session
-from typing import List, Optional, Type, Any
-import json
-import os
-import logging
+"""CRUD helpers using sqlite3 connections instead of SQLAlchemy.
 
-from .database import SabbathSchool, WorshipService, YouthService, WednesdayService
+Each function expects `db` to be a `sqlite3.Connection` (as provided by
+`app.database.get_db`) and returns lightweight `Entry` objects with
+attribute-style access (`id`, `date`, `data`).
+"""
+import json
+import logging
+from typing import List, Optional, Any
+
 from .schemas import ServiceCreate, ServiceUpdate
 
 logger = logging.getLogger(__name__)
 
 
-def _commit_with_log(db: Session, context: str = ""):
-    """Commit the session and log the effective UID/GID on failure or for auditing."""
-    try:
-        uid = os.geteuid()
-        gid = os.getegid()
-    except Exception:
-        # Fallback for platforms without geteuid/getegid
-        uid = os.getuid() if hasattr(os, "getuid") else None
-        gid = os.getgid() if hasattr(os, "getgid") else None
+class Entry:
+    """Simple object to mimic ORM-like attribute access for rows."""
 
-    logger.info("DB commit attempt context=%s uid=%s gid=%s", context, uid, gid)
-    try:
-        db.commit()
-    except Exception:
-        logger.exception("DB commit FAILED context=%s uid=%s gid=%s", context, uid, gid)
-        raise
+    def __init__(self, row: Optional[dict]):
+        if row is None:
+            self.id = None
+            self.date = None
+            self.data = None
+        else:
+            # row may be sqlite3.Row or a mapping
+            self.id = row["id"]
+            self.date = row["date"]
+            self.data = row["data"]
 
 
-def get_service_model(service_type: str) -> Type:
-    """Get the appropriate model class based on service type"""
-    models = {
-        "sabbath_school": SabbathSchool,
-        "worship_service": WorshipService,
-        "youth_service": YouthService,
-        "wednesday_service": WednesdayService,
+def _table_for(service_type: str) -> Optional[str]:
+    tables = {
+        "sabbath_school": "sabbath_school",
+        "worship_service": "worship_service",
+        "youth_service": "youth_service",
+        "wednesday_service": "wednesday_service",
     }
-    return models.get(service_type)
+    return tables.get(service_type)
 
 
-def create_service_entry(
-    db: Session, service_type: str, service_data: ServiceCreate
-):
-    """Create a new service entry"""
-    model = get_service_model(service_type)
-    if not model:
+def create_service_entry(db, service_type: str, service_data: ServiceCreate):
+    table = _table_for(service_type)
+    if not table:
         return None
-    
-    # store the JSON list as text
-    db_entry = model(date=service_data.date, data=json.dumps(service_data.data))
-    db.add(db_entry)
-    _commit_with_log(db, "create_service_entry")
-    db.refresh(db_entry)
-    return db_entry
+    cur = db.execute(f"INSERT INTO {table} (date, data) VALUES (?, ?)", (service_data.date, json.dumps(service_data.data)))
+    db.commit()
+    rowid = cur.lastrowid
+    row = db.execute(f"SELECT id, date, data FROM {table} WHERE id = ?", (rowid,)).fetchone()
+    return Entry(row)
 
 
-def get_service_entry(db: Session, service_type: str, entry_id: int):
-    """Get a service entry by ID"""
-    model = get_service_model(service_type)
-    if not model:
+def get_service_entry(db, service_type: str, entry_id: int):
+    table = _table_for(service_type)
+    if not table:
         return None
-    
-    return db.query(model).filter(model.id == entry_id).first()
+    row = db.execute(f"SELECT id, date, data FROM {table} WHERE id = ?", (entry_id,)).fetchone()
+    return Entry(row) if row else None
 
 
-def get_service_entries(
-    db: Session, service_type: str, skip: int = 0, limit: int = 100
-):
-    """Get all service entries with pagination"""
-    model = get_service_model(service_type)
-    if not model:
+def get_service_entries(db, service_type: str, skip: int = 0, limit: int = 100) -> List[Entry]:
+    table = _table_for(service_type)
+    if not table:
         return []
-    
-    return db.query(model).offset(skip).limit(limit).all()
+    cursor = db.execute(f"SELECT id, date, data FROM {table} ORDER BY id LIMIT ? OFFSET ?", (limit, skip))
+    return [Entry(r) for r in cursor.fetchall()]
 
 
-def get_service_entries_by_date(
-    db: Session, service_type: str, date: str
-):
-    """Get service entries by date (format: yy/ww)"""
-    model = get_service_model(service_type)
-    if not model:
+def get_service_entries_by_date(db, service_type: str, date: str) -> List[Entry]:
+    table = _table_for(service_type)
+    if not table:
         return []
-    
-    return db.query(model).filter(model.date == date).all()
+    cursor = db.execute(f"SELECT id, date, data FROM {table} WHERE date = ?", (date,))
+    return [Entry(r) for r in cursor.fetchall()]
 
 
-def update_service_entry(
-    db: Session, service_type: str, entry_id: int, service_data: ServiceUpdate
-):
-    """Update a service entry"""
-    model = get_service_model(service_type)
-    if not model:
+def update_service_entry(db, service_type: str, entry_id: int, service_data: ServiceUpdate):
+    table = _table_for(service_type)
+    if not table:
         return None
-    
-    db_entry = db.query(model).filter(model.id == entry_id).first()
-    if not db_entry:
+    row = db.execute(f"SELECT id, date, data FROM {table} WHERE id = ?", (entry_id,)).fetchone()
+    if not row:
         return None
-    
+
     update_data = service_data.model_dump(exclude_unset=True)
+    # build set clause
+    sets = []
+    params = []
     for key, value in update_data.items():
         if key == "data":
-            # data comes as a JSON list; store as text
-            setattr(db_entry, "data", json.dumps(value))
+            sets.append("data = ?")
+            params.append(json.dumps(value))
         else:
-            setattr(db_entry, key, value)
-    
-    _commit_with_log(db, f"update_service_entry:{entry_id}")
-    db.refresh(db_entry)
-    return db_entry
+            sets.append(f"{key} = ?")
+            params.append(value)
+    if sets:
+        params.append(entry_id)
+        db.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        db.commit()
+
+    updated = db.execute(f"SELECT id, date, data FROM {table} WHERE id = ?", (entry_id,)).fetchone()
+    return Entry(updated)
 
 
-def delete_service_entry(db: Session, service_type: str, entry_id: int):
-    """Delete a service entry"""
-    model = get_service_model(service_type)
-    if not model:
+def delete_service_entry(db, service_type: str, entry_id: int):
+    table = _table_for(service_type)
+    if not table:
         return False
-    
-    db_entry = db.query(model).filter(model.id == entry_id).first()
-    if not db_entry:
+    row = db.execute(f"SELECT id FROM {table} WHERE id = ?", (entry_id,)).fetchone()
+    if not row:
         return False
-    
-    db.delete(db_entry)
-    _commit_with_log(db, f"delete_service_entry:{entry_id}")
+    db.execute(f"DELETE FROM {table} WHERE id = ?", (entry_id,))
+    db.commit()
     return True
 
 
-def update_service_field_by_date(
-    db: Session, service_type: str, date: str, field_path: str, value: Any
-):
-    """Update a JSON field inside the `data` column for entries matching `date`.
-
-    `field_path` is a dot-separated path into the JSON object (e.g. "meta.author.name").
-    Returns the list of updated entries.
-    """
-    model = get_service_model(service_type)
-    if not model:
+def update_service_field_by_date(db, service_type: str, date: str, field_path: str, value: Any):
+    table = _table_for(service_type)
+    if not table:
         return []
 
-    entries = db.query(model).filter(model.date == date).all()
-    if not entries:
+    cursor = db.execute(f"SELECT id, date, data FROM {table} WHERE date = ?", (date,))
+    rows = cursor.fetchall()
+    if not rows:
         return {"updated": [], "date_found": False, "field_found": False}
 
     path_parts = [p for p in field_path.split('.') if p]
-
-    # If the field_path is a single non-numeric token, treat it as the name
-    # of an element inside the top-level list (`data`) and set its `value`.
     is_name_lookup = len(path_parts) == 1 and not path_parts[0].isdigit()
 
     def exists_nested(obj: Any, parts: list) -> bool:
@@ -167,7 +145,6 @@ def update_service_field_by_date(
         return True
 
     def set_nested_if_exists(d: Any, parts: list, val: Any):
-        # Only set if the full path exists; traverse and set the leaf
         cur = d
         for i, p in enumerate(parts):
             last = (i == len(parts) - 1)
@@ -190,13 +167,12 @@ def update_service_field_by_date(
 
     field_found_any = False
     updated = []
-    for entry in entries:
+    for row in rows:
         try:
-            data_obj = json.loads(entry.data) if entry.data else []
+            data_obj = json.loads(row["data"]) if row["data"] else []
         except Exception:
             data_obj = []
 
-        # Name-based lookup: search list items for a dict with matching "name" and set its "value"
         if is_name_lookup:
             found_in_entry = False
             if isinstance(data_obj, list):
@@ -206,78 +182,64 @@ def update_service_field_by_date(
                         found_in_entry = True
             if found_in_entry:
                 field_found_any = True
-                entry.data = json.dumps(data_obj)
-                db.add(entry)
-                updated.append(entry)
+                db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
+                updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))
             continue
 
-        # Fallback: path-based nested update
         if exists_nested(data_obj, path_parts):
             field_found_any = True
             ok = set_nested_if_exists(data_obj, path_parts, value)
             if ok:
-                entry.data = json.dumps(data_obj)
-                db.add(entry)
-                updated.append(entry)
+                db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
+                updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))
 
     if not field_found_any:
-        # date exists but field not found in any entry
         return {"updated": [], "date_found": True, "field_found": False}
 
-    _commit_with_log(db, f"update_service_field_by_date:{service_type}:{date}:{field_path}")
-    for e in updated:
-        db.refresh(e)
-
+    db.commit()
     return {"updated": updated, "date_found": True, "field_found": True}
 
 
-def update_service_entries_by_date(
-    db: Session, service_type: str, date: str, service_data: ServiceUpdate
-):
-    """Update all entries matching `date` with fields from `service_data`.
-
-    Returns list of updated entries.
-    """
-    model = get_service_model(service_type)
-    if not model:
+def update_service_entries_by_date(db, service_type: str, date: str, service_data: ServiceUpdate):
+    table = _table_for(service_type)
+    if not table:
         return []
-
-    entries = db.query(model).filter(model.date == date).all()
-    if not entries:
+    cursor = db.execute(f"SELECT id, date, data FROM {table} WHERE date = ?", (date,))
+    rows = cursor.fetchall()
+    if not rows:
         return []
 
     update_data = service_data.model_dump(exclude_unset=True)
     updated = []
-    for entry in entries:
+    for row in rows:
+        sets = []
+        params = []
         for key, value in update_data.items():
             if key == "data":
-                entry.data = json.dumps(value)
+                sets.append("data = ?")
+                params.append(json.dumps(value))
             else:
-                setattr(entry, key, value)
-        db.add(entry)
-        updated.append(entry)
+                sets.append(f"{key} = ?")
+                params.append(value)
+        if sets:
+            params.append(row["id"])
+            db.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE id = ?", tuple(params))
+            updated.append(Entry({"id": row["id"], "date": row["date"], "data": update_data.get("data", row["data"]) if isinstance(update_data.get("data", row["data"]), str) else json.dumps(update_data.get("data", row["data"]))}))
 
-    _commit_with_log(db, f"update_service_entries_by_date:{service_type}:{date}")
-    for e in updated:
-        db.refresh(e)
-
+    db.commit()
     return updated
 
 
-def delete_service_entries_by_date(db: Session, service_type: str, date: str):
-    """Delete all entries matching `date`. Returns number of deleted rows."""
-    model = get_service_model(service_type)
-    if not model:
+def delete_service_entries_by_date(db, service_type: str, date: str):
+    table = _table_for(service_type)
+    if not table:
         return 0
-
-    entries = db.query(model).filter(model.date == date).all()
-    if not entries:
+    cursor = db.execute(f"SELECT id FROM {table} WHERE date = ?", (date,))
+    rows = cursor.fetchall()
+    if not rows:
         return 0
-
-    count = 0
-    for entry in entries:
-        db.delete(entry)
-        count += 1
-
-    _commit_with_log(db, f"delete_service_entries_by_date:{service_type}:{date}")
-    return count
+    ids = [r["id"] for r in rows]
+    for _id in ids:
+        db.execute(f"DELETE FROM {table} WHERE id = ?", (_id,))
+    db.commit()
+    return len(ids)
