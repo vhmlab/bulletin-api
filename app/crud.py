@@ -1,9 +1,31 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Type, Any
 import json
+import os
+import logging
 
 from .database import SabbathSchool, WorshipService, YouthService, WednesdayService
 from .schemas import ServiceCreate, ServiceUpdate
+
+logger = logging.getLogger(__name__)
+
+
+def _commit_with_log(db: Session, context: str = ""):
+    """Commit the session and log the effective UID/GID on failure or for auditing."""
+    try:
+        uid = os.geteuid()
+        gid = os.getegid()
+    except Exception:
+        # Fallback for platforms without geteuid/getegid
+        uid = os.getuid() if hasattr(os, "getuid") else None
+        gid = os.getgid() if hasattr(os, "getgid") else None
+
+    logger.info("DB commit attempt context=%s uid=%s gid=%s", context, uid, gid)
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("DB commit FAILED context=%s uid=%s gid=%s", context, uid, gid)
+        raise
 
 
 def get_service_model(service_type: str) -> Type:
@@ -28,7 +50,7 @@ def create_service_entry(
     # store the JSON list as text
     db_entry = model(date=service_data.date, data=json.dumps(service_data.data))
     db.add(db_entry)
-    db.commit()
+    _commit_with_log(db, "create_service_entry")
     db.refresh(db_entry)
     return db_entry
 
@@ -84,7 +106,7 @@ def update_service_entry(
         else:
             setattr(db_entry, key, value)
     
-    db.commit()
+    _commit_with_log(db, f"update_service_entry:{entry_id}")
     db.refresh(db_entry)
     return db_entry
 
@@ -100,7 +122,7 @@ def delete_service_entry(db: Session, service_type: str, entry_id: int):
         return False
     
     db.delete(db_entry)
-    db.commit()
+    _commit_with_log(db, f"delete_service_entry:{entry_id}")
     return True
 
 
@@ -202,7 +224,7 @@ def update_service_field_by_date(
         # date exists but field not found in any entry
         return {"updated": [], "date_found": True, "field_found": False}
 
-    db.commit()
+    _commit_with_log(db, f"update_service_field_by_date:{service_type}:{date}:{field_path}")
     for e in updated:
         db.refresh(e)
 
@@ -235,7 +257,7 @@ def update_service_entries_by_date(
         db.add(entry)
         updated.append(entry)
 
-    db.commit()
+    _commit_with_log(db, f"update_service_entries_by_date:{service_type}:{date}")
     for e in updated:
         db.refresh(e)
 
@@ -257,5 +279,5 @@ def delete_service_entries_by_date(db: Session, service_type: str, date: str):
         db.delete(entry)
         count += 1
 
-    db.commit()
+    _commit_with_log(db, f"delete_service_entries_by_date:{service_type}:{date}")
     return count
