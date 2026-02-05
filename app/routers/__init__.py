@@ -7,10 +7,12 @@ from .sabbath_school import sabbath_school_router
 from .worship_service import worship_service_router
 from .youth_service import youth_service_router
 from .wednesday_service import wednesday_service_router
+from .forms import forms_router
 
 __all__ = [
     "sabbath_school_router",
     "worship_service_router",
     "youth_service_router",
     "wednesday_service_router",
+    "forms_router",
 ]

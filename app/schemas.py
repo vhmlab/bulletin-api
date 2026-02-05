@@ -3,7 +3,7 @@ from typing import Optional, Any, List
 
 
 class ServiceBase(BaseModel):
-    date: str  # Format: yy/ww (e.g., "26/04" for year 2026, week 4)
+    date: str  # Format: yyyy-ww (e.g., "2026-04" for year 2026, week 4)
     data: List[Any]  # JSON list; will be stored as text in DB
 
 
@@ -12,7 +12,7 @@ class ServiceCreate(ServiceBase):
 
 
 class ServiceUpdate(BaseModel):
-    date: Optional[str] = None  # Format: yy/ww (e.g., "26/04")
+    date: Optional[str] = None  # Format: yyyy-ww (e.g., "2026-04")
     data: Optional[List[Any]] = None
 
 
