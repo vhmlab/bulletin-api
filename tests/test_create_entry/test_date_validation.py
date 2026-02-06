@@ -11,7 +11,8 @@ sys.path.insert(0, str(repo_root))
 
 
 def _prepare_db(tmp_path):
-    db_file = tmp_path / "test_boletin.db"
+    # Place the sqlite DB next to this test file so it can be inspected
+    db_file = Path(__file__).resolve().with_suffix(".db")
     os.environ["DISABLE_AUTH"] = "true"
     os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
 
@@ -22,32 +23,40 @@ def _prepare_db(tmp_path):
     conn.row_factory = sqlite3.Row
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
+        # Ensure table is empty so tests run idempotently when DB file persists
+        conn.execute(f"DELETE FROM {t}")
     conn.commit()
     conn.close()
 
 
 def test_create_invalid_date_format(tmp_path):
     _prepare_db(tmp_path)
-
     from app.main import app
 
     client = TestClient(app)
 
+    # Load realistic example data from tests/example.json
+    example_path = Path(__file__).resolve().parents[1] / "example.json"
+    example_data = json.loads(example_path.read_text())
+
     # invalid formats
     for bad in ["2026-4", "26-04", "2026-00", "2026-54", "abcd-ef"]:
-        resp = client.post("/sabbath_school/", json={"date": bad, "data": []})
+        resp = client.post("/sabbath_school/", json={"date": bad, "data": example_data})
         assert resp.status_code == 400
         assert "Invalid date format" in resp.json().get("detail", "")
 
 
 def test_create_duplicate_date(tmp_path):
     _prepare_db(tmp_path)
-
     from app.main import app
 
     client = TestClient(app)
 
-    valid = {"date": "2026-04", "data": [{"name": "one", "value": 1}]}
+    # Use realistic example data for creation
+    example_path = Path(__file__).resolve().parents[1] / "example.json"
+    example_data = json.loads(example_path.read_text())
+
+    valid = {"date": "2026-04", "data": example_data}
     resp = client.post("/sabbath_school/", json=valid)
     assert resp.status_code == 201
 

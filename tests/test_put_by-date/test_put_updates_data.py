@@ -10,8 +10,8 @@ sys.path.insert(0, str(repo_root))
 
 
 def test_put_updates_data_by_date(tmp_path):
-    # Prepare a temporary sqlite DB and point the app to it; disable auth for tests
-    db_file = tmp_path / "test_boletin.db"
+    # Place the sqlite DB next to this test file so it can be inspected
+    db_file = Path(__file__).resolve().with_suffix(".db")
     os.environ["DISABLE_AUTH"] = "true"
     os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
 

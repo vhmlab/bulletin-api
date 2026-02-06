@@ -14,10 +14,8 @@ _resolve_db_path = None
 
 
 def create_sample_entries(monkeypatch, create_multiple: bool = False):
-    # Prepare a unique temporary sqlite DB and point the app to it
-    import tempfile
-    tmp_dir = Path(tempfile.mkdtemp(prefix="boletin_test_"))
-    db_file = tmp_dir / "test_boletin.db"
+    # Place the sqlite DB next to this test file so it can be inspected
+    db_file = Path(__file__).resolve().with_suffix(".db")
     os.environ["DISABLE_AUTH"] = "true"
     os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
     # Import _resolve_db_path after setting DATABASE_URL so DEFAULT_DB resolves correctly
