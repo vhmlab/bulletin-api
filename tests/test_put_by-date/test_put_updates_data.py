@@ -9,22 +9,13 @@ repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 
 
-def test_put_updates_data_by_date(tmp_path):
-    # Place the sqlite DB next to this test file so it can be inspected
-    db_file = Path(__file__).resolve().with_suffix(".db")
-    # Ensure the app's database module uses this DB file (config.py will
-    # default DATABASE_URL to a similar path when running under pytest).
-    import importlib
-    dbmod = importlib.import_module("app.database")
-    dbmod.DEFAULT_DB = db_file
+def test_put_updates_data_by_date(per_test_db, example_data):
+    # Use fixtures to prepare DB and example data
+    db_file = per_test_db
+    initial_data = example_data
 
     conn = sqlite3.connect(str(db_file))
     conn.row_factory = sqlite3.Row
-    for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
-        conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
-
-    example_path = Path(__file__).resolve().parents[1] / "example.json"
-    initial_data = json.loads(example_path.read_text())
 
     conn.execute("DELETE FROM worship_service WHERE date = ?", ("2026-06",))
     conn.execute(

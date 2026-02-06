@@ -13,23 +13,29 @@ sys.path.insert(0, str(repo_root))
 _resolve_db_path = None
 
 
-def create_sample_entries(monkeypatch, create_multiple: bool = False):
-    # Place the sqlite DB next to this test file so it can be inspected
-    db_file = Path(__file__).resolve().with_suffix(".db")
-    # Ensure the application's database module uses this test DB even if it was previously imported
-    import importlib
-    dbmod = importlib.import_module("app.database")
-    dbmod.DEFAULT_DB = db_file
-    db_path = db_file
+def create_sample_entries(monkeypatch, create_multiple: bool = False, per_test_db=None, example_data=None):
+    # If fixtures are provided directly, use them; otherwise set up DB next to test
+    if per_test_db is None:
+        db_file = Path(__file__).resolve().with_suffix(".db")
+        import importlib
+        dbmod = importlib.import_module("app.database")
+        dbmod.DEFAULT_DB = db_file
+    else:
+        db_file = per_test_db
 
+    db_path = db_file
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
 
-    # Insert realistic worship entries from tests/example.json
-    example_path = Path(__file__).resolve().parents[1] / "example.json"
-    worship_data = json.loads(example_path.read_text())
+    # Use provided example_data fixture if available
+    if example_data is None:
+        example_path = Path(__file__).resolve().parents[1] / "example.json"
+        worship_data = json.loads(example_path.read_text())
+    else:
+        worship_data = example_data
+
     conn.execute("DELETE FROM worship_service WHERE date = ?", ("2026-04",))
     conn.execute(
         "INSERT INTO worship_service (date, data) VALUES (?, ?)",
@@ -45,8 +51,8 @@ def create_sample_entries(monkeypatch, create_multiple: bool = False):
     return db_file
 
 
-def test_patch_valid_list_updates(tmp_path, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch)
+def test_patch_valid_list_updates(per_test_db, example_data, monkeypatch):
+    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     # update using list of dicts where keys match existing items
@@ -68,8 +74,8 @@ def test_patch_valid_list_updates(tmp_path, monkeypatch):
     assert found
 
 
-def test_patch_key_mismatch_rejected(tmp_path, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch)
+def test_patch_key_mismatch_rejected(per_test_db, example_data, monkeypatch):
+    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     # use a dict whose keys don't match any stored nested `value` dict
@@ -78,8 +84,8 @@ def test_patch_key_mismatch_rejected(tmp_path, monkeypatch):
     assert r.status_code == 400
 
 
-def test_patch_non_list_rejected(tmp_path, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch)
+def test_patch_non_list_rejected(per_test_db, example_data, monkeypatch):
+    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     payload = "not-a-list"
@@ -87,9 +93,9 @@ def test_patch_non_list_rejected(tmp_path, monkeypatch):
     assert r.status_code in (400, 422)
 
 
-def test_patch_atomic_across_entries(tmp_path, monkeypatch):
+def test_patch_atomic_across_entries(per_test_db, example_data, monkeypatch):
     # create two entries with same date and ensure update applies to both or none
-    dbpath = create_sample_entries(monkeypatch, create_multiple=True)
+    dbpath = create_sample_entries(monkeypatch, create_multiple=True, per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     payload = [{"topic": 0, "sub": 0, "number": 99, "url": ""}]

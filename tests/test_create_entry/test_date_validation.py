@@ -28,15 +28,10 @@ def _prepare_db(tmp_path):
     conn.close()
 
 
-def test_create_invalid_date_format(tmp_path):
-    _prepare_db(tmp_path)
+def test_create_invalid_date_format(per_test_db, example_data):
     from app.main import app
 
     client = TestClient(app)
-
-    # Load realistic example data from tests/example.json
-    example_path = Path(__file__).resolve().parents[1] / "example.json"
-    example_data = json.loads(example_path.read_text())
 
     # invalid formats
     for bad in ["2026-4", "26-04", "2026-00", "2026-54", "abcd-ef"]:
@@ -45,15 +40,10 @@ def test_create_invalid_date_format(tmp_path):
         assert "Invalid date format" in resp.json().get("detail", "")
 
 
-def test_create_duplicate_date(tmp_path):
-    _prepare_db(tmp_path)
+def test_create_duplicate_date(per_test_db, example_data):
     from app.main import app
 
     client = TestClient(app)
-
-    # Use realistic example data for creation
-    example_path = Path(__file__).resolve().parents[1] / "example.json"
-    example_data = json.loads(example_path.read_text())
 
     valid = {"date": "2026-04", "data": example_data}
     resp = client.post("/sabbath_school/", json=valid)
