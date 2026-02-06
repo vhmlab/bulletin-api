@@ -113,7 +113,7 @@ def delete_service_entry(db, service_type: str, entry_id: int):
     return True
 
 
-def update_service_field_by_date(db, service_type: str, date: str, field_path: str, value: Any):
+def update_service_field_by_date(db, service_type: str, date: str, values_list: list):
     table = _table_for(service_type)
     if not table:
         return []
@@ -122,79 +122,48 @@ def update_service_field_by_date(db, service_type: str, date: str, field_path: s
     rows = cursor.fetchall()
     if not rows:
         return {"updated": [], "date_found": False, "field_found": False}
+    # Validate that input is a list of dicts
+    if not isinstance(values_list, list) or not all(isinstance(v, dict) for v in values_list):
+        return {"updated": [], "date_found": True, "field_found": False}
 
-    path_parts = [p for p in field_path.split('.') if p]
-    is_name_lookup = len(path_parts) == 1 and not path_parts[0].isdigit()
-
-    def exists_nested(obj: Any, parts: list) -> bool:
-        cur = obj
-        for p in parts:
-            if p.isdigit():
-                if not isinstance(cur, list):
-                    return False
-                idx = int(p)
-                if idx < 0 or idx >= len(cur):
-                    return False
-                cur = cur[idx]
-            else:
-                if not isinstance(cur, dict):
-                    return False
-                if p not in cur:
-                    return False
-                cur = cur[p]
-        return True
-
-    def set_nested_if_exists(d: Any, parts: list, val: Any):
-        cur = d
-        for i, p in enumerate(parts):
-            last = (i == len(parts) - 1)
-            if p.isdigit():
-                idx = int(p)
-                if not isinstance(cur, list) or idx < 0 or idx >= len(cur):
-                    return False
-                if last:
-                    cur[idx] = val
-                    return True
-                cur = cur[idx]
-            else:
-                if not isinstance(cur, dict) or p not in cur:
-                    return False
-                if last:
-                    cur[p] = val
-                    return True
-                cur = cur[p]
-        return False
-
-    field_found_any = False
-    updated = []
+    # First pass: ensure that for every row, each incoming dict matches at least one
+    # existing dict by keys. If any row does not contain a matching-key dict for any
+    # incoming dict, fail the whole operation.
     for row in rows:
         try:
             data_obj = json.loads(row["data"]) if row["data"] else []
         except Exception:
             data_obj = []
 
-        if is_name_lookup:
-            found_in_entry = False
-            if isinstance(data_obj, list):
-                for item in data_obj:
-                    if isinstance(item, dict) and item.get("name") == path_parts[0]:
-                        item["value"] = value
-                        found_in_entry = True
-            if found_in_entry:
-                field_found_any = True
-                db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
-                updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))
-            continue
+        if not isinstance(data_obj, list):
+            return {"updated": [], "date_found": True, "field_found": False}
 
-        if exists_nested(data_obj, path_parts):
-            field_found_any = True
-            ok = set_nested_if_exists(data_obj, path_parts, value)
-            if ok:
-                db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
-                updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))
+        for incoming in values_list:
+            incoming_keys = set(incoming.keys())
+            found = False
+            for item in data_obj:
+                if isinstance(item, dict) and isinstance(item.get("value"), dict) and set(item.get("value").keys()) == incoming_keys:
+                    found = True
+                    break
+            if not found:
+                return {"updated": [], "date_found": True, "field_found": False}
 
-    if not field_found_any:
-        return {"updated": [], "date_found": True, "field_found": False}
+    # Second pass: apply updates (now that validation passed for all rows)
+    updated = []
+    for row in rows:
+        data_obj = json.loads(row["data"]) if row["data"] else []
+        # For each incoming dict, update matching item(s) in the data list by replacing the
+        # nested `value` dict when its keys match the incoming dict keys.
+        for incoming in values_list:
+            incoming_keys = set(incoming.keys())
+            for idx, item in enumerate(data_obj):
+                if isinstance(item, dict) and isinstance(item.get("value"), dict) and set(item.get("value").keys()) == incoming_keys:
+                    # replace the nested value dict
+                    item["value"] = incoming
+                    data_obj[idx] = item
+
+        db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
+        updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))
 
     db.commit()
     return {"updated": updated, "date_found": True, "field_found": True}

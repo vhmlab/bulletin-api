@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Body
+from typing import List, Dict, Any
 import sqlite3
 from .database import get_db
 from .schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate
@@ -57,15 +57,15 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         entries = get_service_entries_by_date(db, service_type, date)
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in entries]
 
-    @router.patch("/by-date/{date:path}/field", response_model=List[ServiceResponse])
+    @router.patch("/by-date/{date:path}/values", response_model=List[ServiceResponse])
     def update_field_by_date(
         date: str,
-        field_update: FieldUpdate,
+        values: List[Dict[str, Any]] = Body(...),
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user)
     ):
         """Update a specific JSON field inside the `data` column for entries matching `date`."""
-        result = update_service_field_by_date(db, service_type, date, field_update.field, field_update.value)
+        result = update_service_field_by_date(db, service_type, date, values)
         # Defensive checks in case the CRUD function returned an unexpected value
         if result is None:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error updating field")
@@ -76,7 +76,7 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         if not result.get("date_found"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entries found for date {date}")
         if not result.get("field_found"):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Field '{field_update.field}' not found for date {date}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"One or more provided dictionary keys do not match stored data for date {date}")
 
         updated = result.get("updated", [])
         return [{"id": e.id, "date": e.date, "data": json.loads(e.data) if e.data else []} for e in updated]

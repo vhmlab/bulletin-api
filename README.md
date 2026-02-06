@@ -135,6 +135,63 @@ All service endpoints require authentication. Each service type has the same end
 - `PUT /{entry_id}` - Update entry
 - `DELETE /{entry_id}` - Delete entry
 
+#### Patch JSON fields by date
+
+Update one or more nested `value` objects inside the stored `data` list for all entries matching a given `date` (format: `yyyy-ww`).
+
+- `PATCH /{service_type}/by-date/{date}/values` - Accepts a JSON array in the request body. Each element of the array should be a `value`-dictionary whose keys match the keys of an existing item's nested `value` object in the stored `data` list. If any incoming dict does not match for any entry, the request will fail.
+
+Example: stored data (before):
+
+```json
+[{
+  "name": {
+    "Hymn": {"en": "Opening Hymn", "es": "Himno de Apertura"},
+    "Song": {"en": "Opening Song", "es": "Canto de Apertura"}
+  },
+  "type": "hymn",
+  "value": {"topic": 0, "sub": 0, "number": 2, "url": ""}
+}, {
+  "name": {"en": "Scripture Reading", "es": "Lectura Biblica"},
+  "type": "scripture",
+  "value": {"translation": 16, "book": "Genesis", "chapter": 1, "verse_start": 1, "verse_end": 1}
+}]
+```
+
+Valid PATCH request body (only the nested `value` objects are sent):
+
+```json
+{
+  "values": [
+    {"topic": 0, "sub": 0, "number": 35, "url": ""},
+    {"translation": 16, "book": "Genesis", "chapter": 2, "verse_start": 5, "verse_end": 5}
+  ]
+}
+```
+
+Stored data (after):
+
+```json
+[{
+  "name": {"Hymn": {"en": "Opening Hymn", "es": "Himno de Apertura"}, "Song": {"en": "Opening Song", "es": "Canto de Apertura"}},
+  "type": "hymn",
+  "value": {"topic": 0, "sub": 0, "number": 35, "url": ""}
+}, {
+  "name": {"en": "Scripture Reading", "es": "Lectura Biblica"},
+  "type": "scripture",
+  "value": {"translation": 16, "book": "Genesis", "chapter": 2, "verse_start": 5, "verse_end": 5}
+}]
+```
+
+cURL example:
+
+```bash
+curl -X PATCH "http://localhost:8000/worship_service/by-date/2026-04/values" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{"topic":0,"sub":0,"number":35,"url":""},{"translation":16,"book":"Genesis","chapter":2,"verse_start":5,"verse_end":5}]'
+```
+
 ## API Usage Examples
 
 ### Create Entry
@@ -144,8 +201,11 @@ curl -X POST "http://localhost:8000/sabbath_school/" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "date": "2026-01-25T10:00:00",
-    "data": "{\"title\": \"Bible Study\", \"topic\": \"Faith and Works\"}"
+    "date": "2026-04",
+    "data": [
+      {"name": "Opening Hymn", "type": "hymn", "value": {"topic": 0, "sub": 0, "number": 2, "url": ""}},
+      {"name": "Scripture Reading", "type": "scripture", "value": {"translation": 16, "book": "Genesis", "chapter": 1, "verse_start": 1, "verse_end": 1}}
+    ]
   }'
 ```
 
@@ -166,7 +226,7 @@ curl -X GET "http://localhost:8000/sabbath_school/1" \
 ### Get Entries by Date
 
 ```bash
-curl -X GET "http://localhost:8000/sabbath_school/by-date/2026-01-25T10:00:00" \
+curl -X GET "http://localhost:8000/sabbath_school/by-date/2026-04" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -177,7 +237,9 @@ curl -X PUT "http://localhost:8000/sabbath_school/1" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": "{\"title\": \"Updated Bible Study\", \"topic\": \"Faith in Action\"}"
+    "data": [
+      {"name": "Updated Hymn", "type": "hymn", "value": {"topic": 1, "sub": 0, "number": 10, "url": ""}}
+    ]
   }'
 ```
 
@@ -192,17 +254,15 @@ curl -X DELETE "http://localhost:8000/sabbath_school/1" \
 
 Each service entry has two fields:
 
-- **date**: ISO 8601 datetime format (e.g., `2026-01-25T10:00:00`)
-- **data**: JSON object stored as text string
+- **date**: Year-week string in `yyyy-ww` format (e.g., `2026-04`)
+- **data**: JSON array stored as text string. Each element is typically an object describing a part of the bulletin (hymn, scripture, speaker, etc.).
 
-Example data field:
+Example `data` value:
 ```json
-{
-  "title": "Morning Worship",
-  "hymns": ["Hymn 1", "Hymn 2"],
-  "speaker": "Pastor John",
-  "sermon": "The Power of Prayer"
-}
+[
+  {"name": "Opening Hymn", "type": "hymn", "value": {"topic": 0, "sub": 0, "number": 2, "url": ""}},
+  {"name": "Scripture Reading", "type": "scripture", "value": {"translation": 16, "book": "Genesis", "chapter": 1, "verse_start": 1, "verse_end": 1}}
+]
 ```
 
 ## Database

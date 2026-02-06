@@ -16,4 +16,4 @@ ENV/
 # Runtime logs and pid
 server_live.log
 uvicorn.log
-uvicorn.pid
+*.pid

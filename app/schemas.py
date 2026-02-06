@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 
 class ServiceBase(BaseModel):
@@ -33,5 +33,7 @@ class TokenData(BaseModel):
 
 
 class FieldUpdate(BaseModel):
-    field: str  # dot-separated path to the JSON field to update
-    value: Any
+    # A list of dictionaries containing values to update.
+    # Each dict's keys must match the keys of an existing dict in the stored `data` list,
+    # otherwise the request will fail.
+    values: List[Dict[str, Any]]
