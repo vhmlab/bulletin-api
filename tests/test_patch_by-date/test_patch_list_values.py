@@ -27,11 +27,9 @@ def create_sample_entries(monkeypatch, create_multiple: bool = False):
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
 
-    # Insert one or two worship entries for 2026-04
-    worship_data = [
-        {"name": "Opening Prayer", "type": "hymn", "value": {"topic": 0, "sub": 0, "number": 2, "url": ""}},
-        {"name": "Scripture Reading", "type": "scripture", "value": {"translation": 16, "book": "Genesis", "chapter": 1, "verse_start": 1, "verse_end": 1}},
-    ]
+    # Insert realistic worship entries from tests/example.json
+    example_path = Path(__file__).resolve().parents[1] / "example.json"
+    worship_data = json.loads(example_path.read_text())
     conn.execute("DELETE FROM worship_service WHERE date = ?", ("2026-04",))
     conn.execute(
         "INSERT INTO worship_service (date, data) VALUES (?, ?)",
@@ -59,13 +57,14 @@ def test_patch_valid_list_updates(tmp_path, monkeypatch):
     data = r.json()
     assert isinstance(data, list)
     assert data[0]["date"] == "2026-04"
-    # ensure updated value is present
+    # ensure updated value is present for the hymn entry
     found = False
     for item in data[0]["data"]:
-        if isinstance(item, dict) and item.get("name") == "Opening Prayer":
+        if isinstance(item, dict) and item.get("type") == "hymn":
             assert isinstance(item.get("value"), dict)
             assert item.get("value")["number"] == 35
             found = True
+            break
     assert found
 
 
@@ -102,8 +101,9 @@ def test_patch_atomic_across_entries(tmp_path, monkeypatch):
     for entry in data:
         found = False
         for item in entry["data"]:
-            if isinstance(item, dict) and item.get("name") == "Opening Prayer":
+            if isinstance(item, dict) and item.get("type") == "hymn":
                 assert isinstance(item.get("value"), dict)
                 assert item.get("value")["number"] == 99
                 found = True
+                break
         assert found

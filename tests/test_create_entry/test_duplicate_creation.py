@@ -42,7 +42,10 @@ def test_duplicate_creation_all_services(tmp_path):
         "/wednesday_service/",
     ]
 
-    payload = {"date": "2026-05", "data": [{"name": "item", "value": 1}]}
+    # Use realistic example data from tests/example.json
+    example_path = Path(__file__).resolve().parents[1] / "example.json"
+    example_data = json.loads(example_path.read_text())
+    payload = {"date": "2026-05", "data": example_data}
 
     for endpoint in services:
         resp = client.post(endpoint, json=payload)

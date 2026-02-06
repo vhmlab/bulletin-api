@@ -26,10 +26,13 @@ def test_forms_by_date(tmp_path):
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
 
+    example_path = Path(__file__).resolve().parents[1] / "example.json"
+    example_data = json.loads(example_path.read_text())
+
     conn.execute("DELETE FROM sabbath_school WHERE date = ?", ("2026-04",))
     conn.execute(
         "INSERT INTO sabbath_school (date, data) VALUES (?, ?)",
-        ("2026-04", json.dumps([{"name": "example", "value": "x"}])),
+        ("2026-04", json.dumps(example_data)),
     )
     conn.commit()
     conn.close()
