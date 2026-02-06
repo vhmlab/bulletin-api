@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Depends
+from contextlib import asynccontextmanager
 from fastapi.responses import RedirectResponse, JSONResponse
 from datetime import timedelta
 from .database import init_db
@@ -12,17 +13,19 @@ from .routers import (
 from .auth import oauth, create_access_token
 from .config import settings
 
-# Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+	# Synchronous DB init run before the app starts handling requests
+	init_db()
+	yield
+
+# Initialize FastAPI app with lifespan handler
 app = FastAPI(
 	title="Boletin Service API",
 	description="API for managing church service bulletins with Google OAuth authentication",
 	version="1.0.0",
+	lifespan=lifespan,
 )
-
-# Initialize database
-@app.on_event("startup")
-def startup_event():
-	init_db()
 
 
 # Include routers
