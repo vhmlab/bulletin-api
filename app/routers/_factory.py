@@ -17,6 +17,7 @@ from ..crud import (
 )
 from ..auth import get_current_user
 import json
+import re
 
 
 def create_service_router(service_type: str, service_name: str) -> APIRouter:
@@ -29,6 +30,14 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user),
     ):
+        # validate date format yyyy-ww
+        if not _validate_week_date(service.date):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date format: {service.date}. Expected yyyy-ww")
+        # ensure uniqueness
+        existing = get_service_entries_by_date(db, service_type, service.date)
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"An entry for date {service.date} already exists")
+
         db_entry = create_service_entry(db, service_type, service)
         return {"id": db_entry.id, "date": db_entry.date, "data": json.loads(db_entry.data) if db_entry.data else []}
 
@@ -58,6 +67,9 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user),
     ):
+        # validate date format
+        if not _validate_week_date(date):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date format: {date}. Expected yyyy-ww")
         result = update_service_field_by_date(db, service_type, date, field_update.field, field_update.value)
         if result is None:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error updating field")
@@ -77,6 +89,17 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user),
     ):
+        # validate existing date format
+        if not _validate_week_date(date):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date format: {date}. Expected yyyy-ww")
+        # if updating the date value, validate and ensure uniqueness
+        if service.date is not None:
+            if not _validate_week_date(service.date):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date format: {service.date}. Expected yyyy-ww")
+            if service.date != date:
+                existing = get_service_entries_by_date(db, service_type, service.date)
+                if existing:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"An entry for date {service.date} already exists")
         updated = update_service_entries_by_date(db, service_type, date, service)
         if not updated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entries found for date {date}")
@@ -88,9 +111,21 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user),
     ):
+        # validate date format
+        if not _validate_week_date(date):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date format: {date}. Expected yyyy-ww")
         count = delete_service_entries_by_date(db, service_type, date)
         if count == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No entries found for date {date}")
         return None
 
     return router
+
+
+def _validate_week_date(date_str: str) -> bool:
+    """Validate date string in yyyy-ww format where week is 01-53."""
+    if not isinstance(date_str, str):
+        return False
+    pattern = r"^\d{4}-(0[1-9]|[1-4]\d|5[0-3])$"
+    return re.fullmatch(pattern, date_str) is not None
+

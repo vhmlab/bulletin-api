@@ -54,3 +54,33 @@ def init_db() -> None:
     if not db_path.exists():
         # Create an empty sqlite file
         open(db_path, "a").close()
+    # Ensure a UNIQUE index exists on the `date` column for each service table.
+    # This enforces uniqueness at the DB level without modifying table schemas.
+    tables = ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        for t in tables:
+            # Only attempt to create the index if the table exists
+            r = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", (t,)).fetchone()
+            if not r:
+                continue
+            # Create a unique index on date if it doesn't already exist
+            idx_name = f"idx_{t}_date_unique"
+            try:
+                cur.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {t}(date)")
+            except sqlite3.OperationalError:
+                # If something goes wrong creating the index, ignore to avoid
+                # startup failure; application-level checks also exist.
+                pass
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Ignore DB errors here; other parts of the app will raise HTTP 500
+        # when attempting to open the DB during requests.
+        pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
