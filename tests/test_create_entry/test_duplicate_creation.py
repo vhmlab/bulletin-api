@@ -13,16 +13,17 @@ sys.path.insert(0, str(repo_root))
 def _prepare_db(tmp_path):
     # Place the sqlite DB next to this test file so it can be inspected
     db_file = Path(__file__).resolve().with_suffix(".db")
-    os.environ["DISABLE_AUTH"] = "true"
-    os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
+    import importlib
+    dbmod = importlib.import_module("app.database")
+    dbmod.DEFAULT_DB = db_file
 
-    from app.database import _resolve_db_path
-
-    db_path = _resolve_db_path(os.environ["DATABASE_URL"])
+    db_path = db_file
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
+        # Ensure table is empty so tests are idempotent when DB file persists
+        conn.execute(f"DELETE FROM {t}")
     conn.commit()
     conn.close()
 

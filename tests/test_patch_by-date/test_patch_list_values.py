@@ -16,16 +16,11 @@ _resolve_db_path = None
 def create_sample_entries(monkeypatch, create_multiple: bool = False):
     # Place the sqlite DB next to this test file so it can be inspected
     db_file = Path(__file__).resolve().with_suffix(".db")
-    os.environ["DISABLE_AUTH"] = "true"
-    os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
-    # Import _resolve_db_path after setting DATABASE_URL so DEFAULT_DB resolves correctly
-    from app.database import _resolve_db_path
-
-    db_path = _resolve_db_path(os.environ["DATABASE_URL"])
     # Ensure the application's database module uses this test DB even if it was previously imported
     import importlib
     dbmod = importlib.import_module("app.database")
-    dbmod.DEFAULT_DB = db_path
+    dbmod.DEFAULT_DB = db_file
+    db_path = db_file
 
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row

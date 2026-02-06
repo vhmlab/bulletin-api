@@ -12,18 +12,13 @@ sys.path.insert(0, str(repo_root))
 def test_put_updates_data_by_date(tmp_path):
     # Place the sqlite DB next to this test file so it can be inspected
     db_file = Path(__file__).resolve().with_suffix(".db")
-    os.environ["DISABLE_AUTH"] = "true"
-    os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
-
-    # Resolve the DB path and ensure the application's database module points to it
-    from app.database import _resolve_db_path
+    # Ensure the app's database module uses this DB file (config.py will
+    # default DATABASE_URL to a similar path when running under pytest).
     import importlib
-
-    db_path = _resolve_db_path(os.environ["DATABASE_URL"])
     dbmod = importlib.import_module("app.database")
-    dbmod.DEFAULT_DB = db_path
+    dbmod.DEFAULT_DB = db_file
 
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_file))
     conn.row_factory = sqlite3.Row
     for t in ["sabbath_school", "worship_service", "youth_service", "wednesday_service"]:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY, date TEXT, data TEXT)")
