@@ -17,3 +17,7 @@ ENV/
 server_live.log
 uvicorn.log
 *.pid
+
+# Test-generated logs and per-test DBs
+tests/**/*.log
+tests/**/*.db

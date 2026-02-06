@@ -1,5 +1,4 @@
 import json
-import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -9,11 +8,8 @@ from fastapi.testclient import TestClient
 repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root))
 
-# NOTE: do not import app.database at module import time; import inside helpers
-_resolve_db_path = None
 
-
-def create_sample_entries(monkeypatch, create_multiple: bool = False, per_test_db=None, example_data=None):
+def create_sample_entries(create_multiple: bool = False, per_test_db=None, example_data=None):
     # If fixtures are provided directly, use them; otherwise set up DB next to test
     if per_test_db is None:
         db_file = Path(__file__).resolve().with_suffix(".db")
@@ -51,8 +47,8 @@ def create_sample_entries(monkeypatch, create_multiple: bool = False, per_test_d
     return db_file
 
 
-def test_patch_valid_list_updates(per_test_db, example_data, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
+def test_patch_valid_list_updates(per_test_db, example_data):
+    dbpath = create_sample_entries(per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     # update using list of dicts where keys match existing items
@@ -74,8 +70,8 @@ def test_patch_valid_list_updates(per_test_db, example_data, monkeypatch):
     assert found
 
 
-def test_patch_key_mismatch_rejected(per_test_db, example_data, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
+def test_patch_key_mismatch_rejected(per_test_db, example_data):
+    dbpath = create_sample_entries(per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     # use a dict whose keys don't match any stored nested `value` dict
@@ -84,8 +80,8 @@ def test_patch_key_mismatch_rejected(per_test_db, example_data, monkeypatch):
     assert r.status_code == 400
 
 
-def test_patch_non_list_rejected(per_test_db, example_data, monkeypatch):
-    dbpath = create_sample_entries(monkeypatch, per_test_db=per_test_db, example_data=example_data)
+def test_patch_non_list_rejected(per_test_db, example_data):
+    dbpath = create_sample_entries(per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     payload = "not-a-list"
@@ -93,9 +89,9 @@ def test_patch_non_list_rejected(per_test_db, example_data, monkeypatch):
     assert r.status_code in (400, 422)
 
 
-def test_patch_atomic_across_entries(per_test_db, example_data, monkeypatch):
+def test_patch_atomic_across_entries(per_test_db, example_data):
     # create two entries with same date and ensure update applies to both or none
-    dbpath = create_sample_entries(monkeypatch, create_multiple=True, per_test_db=per_test_db, example_data=example_data)
+    dbpath = create_sample_entries(create_multiple=True, per_test_db=per_test_db, example_data=example_data)
     from app.main import app
     client = TestClient(app)
     payload = [{"topic": 0, "sub": 0, "number": 99, "url": ""}]
