@@ -8,6 +8,7 @@ venv/
 ENV/
 .venv
 *.db
+*.db.bak
 .env
 .DS_Store
 .idea/

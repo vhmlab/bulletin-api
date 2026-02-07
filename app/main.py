@@ -3,6 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi.responses import RedirectResponse, JSONResponse
 from datetime import timedelta
 from .database import init_db
+import sqlite3
+import json
+from .database import get_db
 from .routers import (
 	sabbath_school_router,
 	worship_service_router,
@@ -100,6 +103,21 @@ def logout():
 def health():
 	"""Simple health check endpoint for orchestration and load balancers."""
 	return {"status": "ok"}
+
+
+@app.get("/templates", tags=["Templates"])
+def list_templates(db: sqlite3.Connection = Depends(get_db)):
+	"""Return the list of templates stored in the `templates` DB table.
+
+	Each item includes `name`, `icon`, and parsed `data` (if JSON).
+	"""
+	cur = db.execute("SELECT name, icon, data FROM templates ORDER BY name")
+	rows = cur.fetchall()
+	result = []
+	for r in rows:
+		name, icon = r[0], r[1]
+		result.append({"name": name, "icon": icon})
+	return result
 
 
 if __name__ == "__main__":
