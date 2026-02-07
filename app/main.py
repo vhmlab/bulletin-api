@@ -9,6 +9,7 @@ from .routers import (
 	youth_service_router,
     wednesday_service_router,
     forms_router,
+    templates_router,
 )
 from .auth import oauth, create_access_token
 from .config import settings
@@ -34,6 +35,7 @@ app.include_router(worship_service_router)
 app.include_router(youth_service_router)
 app.include_router(wednesday_service_router)
 app.include_router(forms_router)
+app.include_router(templates_router)
 
 
 # Authentication routes

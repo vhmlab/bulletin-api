@@ -1,0 +1,20 @@
+{
+  "name": {
+    "Hymn": {
+      "en": "Hymn",
+      "es": "Himno"
+    },
+    "Song": {
+      "en": "Song",
+      "es": "Canto"
+    }
+  },
+  "type": "Hymn",
+  "value": {
+    "select": "hymn",
+    "topic": 0,
+    "sub": 0,
+    "number": null,
+    "url": ""
+  }
+}

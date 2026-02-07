@@ -15,6 +15,7 @@ from .crud import (
 )
 from .auth import get_current_user
 import json
+from pathlib import Path
 
 
 def create_service_router(service_type: str, service_name: str) -> APIRouter:
@@ -146,3 +147,22 @@ def forms_by_date(
         "youth_service": bool(ys),
         "wednesday_service": bool(wed),
     }
+
+
+# Template retrieval router
+templates_router = APIRouter(prefix="/template", tags=["Templates"])
+
+
+@templates_router.get("/{element}")
+def get_template(element: str):
+    """Return the JSON template file named `{element}.json` from the top-level `templates` directory."""
+    templates_dir = Path(__file__).resolve().parent.parent / "templates"
+    file_path = templates_dir / f"{element}.json"
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Template {element}.json not found")
+    try:
+        with file_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Template {element}.json contains invalid JSON")
+    return data
