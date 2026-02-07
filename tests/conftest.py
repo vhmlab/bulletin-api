@@ -231,5 +231,38 @@ def per_test_logger(request, monkeypatch):
 
     yield log_file
 
-    lf.write(f"=== TEST {request.node.name} END {time.strftime('%Y-%m-%d %H:%M:%S')} duration={(time.time()-start):.3f}s ===\n\n")
+    # Write end marker with duration
+    lf.write(f"=== TEST {request.node.name} END {time.strftime('%Y-%m-%d %H:%M:%S')} duration={(time.time()-start):.3f}s ===\n")
+
+    # Determine test result if available from pytest's report attributes
+    try:
+        rep = getattr(request.node, "rep_call", None)
+        if rep is None:
+            # fallback to setup/teardown reports if call report missing
+            rep = getattr(request.node, "rep_setup", None) or getattr(request.node, "rep_teardown", None)
+        if rep is None:
+            status = "UNKNOWN"
+        elif getattr(rep, "passed", False):
+            status = "PASSED"
+        elif getattr(rep, "failed", False):
+            status = "FAILED"
+        elif getattr(rep, "skipped", False):
+            status = "SKIPPED"
+        else:
+            status = "UNKNOWN"
+    except Exception:
+        status = "UNKNOWN"
+
+    lf.write(f"RESULT: {status}\n\n")
     lf.close()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Attach the test report (setup/call/teardown) to the test item so
+    fixtures can inspect the result during teardown.
+    """
+    outcome = yield
+    rep = outcome.get_result()
+    # pytest will call this hook for each phase; store the report on the item
+    setattr(item, f"rep_{rep.when}", rep)
