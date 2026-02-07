@@ -138,6 +138,11 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
         if not isinstance(data_obj, list):
             return {"updated": [], "date_found": True, "field_found": False}
 
+        # Require the incoming list to match the stored list length exactly.
+        # If lengths differ, reject the operation for atomicity and data integrity.
+        if len(values_list) != len(data_obj):
+            return {"updated": [], "date_found": True, "field_found": False}
+
         for incoming in values_list:
             incoming_keys = set(incoming.keys())
             found = False

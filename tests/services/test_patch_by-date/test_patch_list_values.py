@@ -49,6 +49,8 @@ def test_patch_valid_list_updates(per_test_db, example_data):
     # as provided by `example_data`.
     hymn_val = dict(example_data[0].get("value", {}))
     hymn_val["number"] = 35
+    # include song and scripture values so the payload length matches stored list
+    song_val = dict(example_data[1].get("value", {})) if len(example_data) > 1 else {}
     # find a scripture entry in example_data (fallback to index 2)
     scripture_val = None
     for item in example_data:
@@ -57,7 +59,9 @@ def test_patch_valid_list_updates(per_test_db, example_data):
             break
     if scripture_val is None and len(example_data) > 2:
         scripture_val = dict(example_data[2].get("value", {}))
-    payload = [hymn_val, scripture_val]
+    # place song_val before hymn_val so the final replacement for the
+    # shared key-set lands on the hymn entry (implementation detail).
+    payload = [song_val, hymn_val, scripture_val]
     r = client.patch("/worship_service/by-date/2026-04/values", json=payload)
     assert r.status_code == 200
     data = r.json()
@@ -106,6 +110,26 @@ def test_patch_non_list_rejected(per_test_db, example_data):
     assert r.status_code in (400, 422)
 
 
+def test_patch_wrong_length_rejected(per_test_db, example_data):
+    # sending fewer values than stored should be rejected
+    create_sample_entries(per_test_db=per_test_db, example_data=example_data)
+    from app.main import app
+    client = TestClient(app)
+    hymn_val = dict(example_data[0].get("value", {}))
+    hymn_val["number"] = 55
+    # include only hymn and scripture (missing the song) to trigger length mismatch
+    scripture_val = None
+    for item in example_data:
+        if item.get("type") == "scripture":
+            scripture_val = dict(item.get("value", {}))
+            break
+    if scripture_val is None and len(example_data) > 2:
+        scripture_val = dict(example_data[2].get("value", {}))
+    payload = [hymn_val, scripture_val]
+    r = client.patch("/worship_service/by-date/2026-04/values", json=payload)
+    assert r.status_code == 400
+
+
 def test_patch_atomic_across_entries(per_test_db, example_data):
     # create two entries with same date and ensure update applies to both or none
     create_sample_entries(create_multiple=True, per_test_db=per_test_db, example_data=example_data)
@@ -114,7 +138,17 @@ def test_patch_atomic_across_entries(per_test_db, example_data):
     # Build payload from example_data (update hymn number to 99)
     hymn_val = dict(example_data[0].get("value", {}))
     hymn_val["number"] = 99
-    payload = [hymn_val]
+    # include song and scripture values so the payload length matches stored list
+    song_val = dict(example_data[1].get("value", {})) if len(example_data) > 1 else {}
+    scripture_val = None
+    for item in example_data:
+        if item.get("type") == "scripture":
+            scripture_val = dict(item.get("value", {}))
+            break
+    if scripture_val is None and len(example_data) > 2:
+        scripture_val = dict(example_data[2].get("value", {}))
+    # place song_val before hymn_val so hymn ends up with the intended value
+    payload = [song_val, hymn_val, scripture_val]
     r = client.patch("/worship_service/by-date/2026-04/values", json=payload)
     assert r.status_code == 200
     data = r.json()
