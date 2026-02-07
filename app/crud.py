@@ -126,9 +126,9 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
     if not isinstance(values_list, list) or not all(isinstance(v, dict) for v in values_list):
         return {"updated": [], "date_found": True, "field_found": False}
 
-    # First pass: ensure that for every row, each incoming dict matches at least one
-    # existing dict by keys. If any row does not contain a matching-key dict for any
-    # incoming dict, fail the whole operation.
+    # First pass: ensure that for every row, the incoming list length equals the
+    # stored list length and that each incoming dict's keys match the keys of the
+    # corresponding stored item's `value` dict (strict positional mapping).
     for row in rows:
         try:
             data_obj = json.loads(row["data"]) if row["data"] else []
@@ -138,34 +138,79 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
         if not isinstance(data_obj, list):
             return {"updated": [], "date_found": True, "field_found": False}
 
-        # Require the incoming list to match the stored list length exactly.
-        # If lengths differ, reject the operation for atomicity and data integrity.
+        # Require exact length match for atomic, position-based updates.
         if len(values_list) != len(data_obj):
             return {"updated": [], "date_found": True, "field_found": False}
 
-        for incoming in values_list:
+        # Ensure each incoming dict matches the stored item's nested `value` keys at the same index.
+        for idx, incoming in enumerate(values_list):
+            if not isinstance(incoming, dict):
+                return {"updated": [], "date_found": True, "field_found": False}
+            item = data_obj[idx]
+            if not (isinstance(item, dict) and isinstance(item.get("value"), dict)):
+                return {"updated": [], "date_found": True, "field_found": False}
             incoming_keys = set(incoming.keys())
-            found = False
-            for item in data_obj:
-                if isinstance(item, dict) and isinstance(item.get("value"), dict) and set(item.get("value").keys()) == incoming_keys:
-                    found = True
-                    break
-            if not found:
+            if set(item.get("value").keys()) != incoming_keys:
                 return {"updated": [], "date_found": True, "field_found": False}
 
-    # Second pass: apply updates (now that validation passed for all rows)
+    # Second pass: apply updates (matching by keys, incoming order matters).
+    # We apply each incoming dict to the first stored item whose nested `value`
+    # keys match; this mimics the original behavior where later incoming items
+    # can overwrite earlier replacements when key-sets are identical.
     updated = []
     for row in rows:
         data_obj = json.loads(row["data"]) if row["data"] else []
-        # For each incoming dict, update matching item(s) in the data list by replacing the
-        # nested `value` dict when its keys match the incoming dict keys.
-        for incoming in values_list:
-            incoming_keys = set(incoming.keys())
-            for idx, item in enumerate(data_obj):
-                if isinstance(item, dict) and isinstance(item.get("value"), dict) and set(item.get("value").keys()) == incoming_keys:
-                    # replace the nested value dict
-                    item["value"] = incoming
-                    data_obj[idx] = item
+
+        # Build a mapping from incoming positions to best-matching stored item
+        # indices. We pick the unused stored item with the highest number of
+        # matching key-value pairs (simple similarity score). This allows the
+        # API to align incoming values with the most appropriate stored item
+        # when multiple items share the same key-set.
+        used = set()
+        mapping = {}
+        for i, incoming in enumerate(values_list):
+            best_j = None
+            best_score = -1
+            for j, item in enumerate(data_obj):
+                if j in used:
+                    continue
+                if not (isinstance(item, dict) and isinstance(item.get("value"), dict)):
+                    continue
+                if set(item.get("value").keys()) != set(incoming.keys()):
+                    continue
+                # compute simple score: number of equal key-value pairs
+                score = 0
+                for k, v in incoming.items():
+                    try:
+                        if item.get("value", {}).get(k) == v:
+                            score += 1
+                    except Exception:
+                        pass
+                if score > best_score:
+                    best_score = score
+                    best_j = j
+            if best_j is None:
+                # should not happen because we validated presence earlier
+                return {"updated": [], "date_found": True, "field_found": False}
+            mapping[i] = best_j
+            used.add(best_j)
+
+        # Construct new ordered list where position i corresponds to incoming i,
+        # using the matched stored item (with non-value fields preserved) but
+        # replacing its nested `value` with the incoming dict.
+        new_data = []
+        for i in range(len(values_list)):
+            j = mapping[i]
+            item = data_obj[j]
+            # copy to avoid mutating original structure unexpectedly
+            if isinstance(item, dict):
+                new_item = dict(item)
+                new_item["value"] = values_list[i]
+            else:
+                new_item = {"value": values_list[i]} if isinstance(values_list[i], dict) else values_list[i]
+            new_data.append(new_item)
+
+        data_obj = new_data
 
         db.execute(f"UPDATE {table} SET data = ? WHERE id = ?", (json.dumps(data_obj), row["id"]))
         updated.append(Entry({"id": row["id"], "date": row["date"], "data": json.dumps(data_obj)}))

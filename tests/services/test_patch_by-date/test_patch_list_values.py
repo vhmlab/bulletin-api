@@ -77,6 +77,21 @@ def test_patch_valid_list_updates(per_test_db, example_data):
             break
     assert found
 
+    # verify DB stored values match the payload we sent
+    conn = sqlite3.connect(str(per_test_db))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT id, date, data FROM worship_service WHERE date = ?", ("2026-04",)).fetchone()
+    assert row is not None
+    stored = json.loads(row["data"]) if row["data"] else []
+
+    # Require exact 1:1 ordered match between stored nested `value` objects and payload
+    assert isinstance(stored, list)
+    assert len(stored) == len(payload), "stored list length does not match payload length"
+    for idx, incoming in enumerate(payload):
+        assert isinstance(stored[idx], dict) and isinstance(stored[idx].get("value"), dict)
+        assert stored[idx].get("value") == incoming, f"stored item at index {idx} {stored[idx].get('value')} does not equal payload {incoming}"
+    conn.close()
+
 
 def test_patch_key_mismatch_rejected(per_test_db, example_data):
     create_sample_entries(per_test_db=per_test_db, example_data=example_data)
