@@ -104,7 +104,79 @@ def per_test_logger(request, monkeypatch):
 
             def execute(self, sql, *params, **exec_kw):
                 _log(f"EXECUTE: {sql!r} params={params}")
-                return self._inner.execute(sql, *params, **exec_kw)
+                cur = self._inner.execute(sql, *params, **exec_kw)
+                # If this is a SELECT, wrap cursor to log fetched results
+                try:
+                    stmt = sql.strip().split(None, 1)[0].upper()
+                except Exception:
+                    stmt = None
+                if stmt == "SELECT":
+                    class CursorProxy:
+                        def __init__(self, inner_cur):
+                            object.__setattr__(self, "_inner", inner_cur)
+
+                        def fetchone(self):
+                            row = self._inner.fetchone()
+                            try:
+                                if row is None:
+                                    _log("FETCHONE: None")
+                                else:
+                                    try:
+                                        if hasattr(row, "keys"):
+                                            _log(f"FETCHONE: {json.dumps(dict(row), ensure_ascii=False)}")
+                                        else:
+                                            _log(f"FETCHONE: {json.dumps(row, ensure_ascii=False)}")
+                                    except Exception:
+                                        _log(f"FETCHONE: {row!r}")
+                            except Exception:
+                                pass
+                            return row
+
+                        def fetchall(self):
+                            rows = self._inner.fetchall()
+                            try:
+                                if rows is None:
+                                    _log("FETCHALL: None")
+                                else:
+                                    try:
+                                        serializable = []
+                                        for r in rows:
+                                            if hasattr(r, "keys"):
+                                                serializable.append(dict(r))
+                                            else:
+                                                serializable.append(r)
+                                        _log(f"FETCHALL: {json.dumps(serializable, ensure_ascii=False)}")
+                                    except Exception:
+                                        _log(f"FETCHALL: {rows!r}")
+                            except Exception:
+                                pass
+                            return rows
+
+                        def fetchmany(self, size=None):
+                            rows = self._inner.fetchmany(size)
+                            try:
+                                if rows is None:
+                                    _log("FETCHMANY: None")
+                                else:
+                                    try:
+                                        serializable = []
+                                        for r in rows:
+                                            if hasattr(r, "keys"):
+                                                serializable.append(dict(r))
+                                            else:
+                                                serializable.append(r)
+                                        _log(f"FETCHMANY: {json.dumps(serializable, ensure_ascii=False)}")
+                                    except Exception:
+                                        _log(f"FETCHMANY: {rows!r}")
+                            except Exception:
+                                pass
+                            return rows
+
+                        def __getattr__(self, name):
+                            return getattr(self._inner, name)
+
+                    return CursorProxy(cur)
+                return cur
 
             def executemany(self, sql, seq_of_params, **exec_kw):
                 _log(f"EXECUTEMANY: {sql!r} params={seq_of_params}")
