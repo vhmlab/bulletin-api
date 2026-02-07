@@ -48,7 +48,7 @@ def example_data():
 
 
 @pytest.fixture
-def per_test_db(request, tmp_path):
+def per_test_db(request):
     """Provide a sqlite DB file placed next to the test file and ensure the
     application's `app.database.DEFAULT_DB` points to it. Also create the
     required tables and clear any existing rows so tests are idempotent.
