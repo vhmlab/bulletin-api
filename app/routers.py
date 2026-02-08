@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from typing import List, Dict, Any
 import sqlite3
 from .database import get_db
-from .schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate
+from .schemas import ServiceCreate, ServiceUpdate, ServiceResponse, FieldUpdate, ServiceCreateDate
 from .crud import (
     create_service_entry,
     get_service_entries,
@@ -27,13 +27,15 @@ def create_service_router(service_type: str, service_name: str) -> APIRouter:
     
     @router.post("/", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
     def create_entry(
-        service: ServiceCreate,
+        service: ServiceCreateDate,
         db: sqlite3.Connection = Depends(get_db),
         current_user: str = Depends(get_current_user)
     ):
-        """Create a new service entry"""
-        db_entry = create_service_entry(db, service_type, service)
-        return {"id": db_entry.id, "date": db_entry.date, "data": json.loads(db_entry.data) if db_entry.data else []}
+        """Create a new service entry accepting only `date` and storing `data` as an empty list."""
+        # Construct a full ServiceCreate payload with empty data to keep CRUD API stable
+        svc = ServiceCreate(date=service.date, data=[])
+        db_entry = create_service_entry(db, service_type, svc)
+        return {"id": db_entry.id, "date": db_entry.date, "data": []}
     
     @router.get("/", response_model=List[ServiceResponse])
     def read_entries(
