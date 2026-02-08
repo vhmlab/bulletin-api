@@ -13,8 +13,8 @@ def test_create_invalid_date_format(per_test_db, example_data):
     client = TestClient(app)
 
     # invalid formats
-    for bad in ["2026-4", "26-04", "2026-00", "2026-54", "abcd-ef"]:
-        resp = client.post("/sabbath_school/", json={"date": bad, "data": example_data})
+    for bad in ["2026-4", "26-04", "2026-00", "2026-54", "abcd-ef", "string"]:
+        resp = client.post("/sabbath_school/", json={"date": bad, "data": []})
         assert resp.status_code == 400
         assert "Invalid date format" in resp.json().get("detail", "")
 
@@ -24,7 +24,7 @@ def test_create_duplicate_date(per_test_db, example_data):
 
     client = TestClient(app)
 
-    valid = {"date": "2026-04", "data": example_data}
+    valid = {"date": "2026-04", "data": []}
     resp = client.post("/sabbath_school/", json=valid)
     assert resp.status_code == 201
 

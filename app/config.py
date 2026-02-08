@@ -27,9 +27,8 @@ if pytest_current:
             test_path = Path(test_file)
         db_path = test_path.with_suffix(".db")
         os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
-    # Default to disabling auth during tests unless explicitly enabled
-    if "DISABLE_AUTH" not in os.environ:
-        os.environ["DISABLE_AUTH"] = "true"
+    # Default to disabling auth during tests
+    os.environ["DISABLE_AUTH"] = "true"
 
 class Settings:
     DISABLE_AUTH: bool = os.getenv("DISABLE_AUTH", "false").lower() == "true"

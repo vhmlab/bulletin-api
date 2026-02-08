@@ -180,6 +180,13 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
                     continue
                 # compute simple score: number of equal key-value pairs
                 score = 0
+                # Prefer matches where a common 'select' discriminator aligns
+                try:
+                    if isinstance(item.get("value"), dict) and isinstance(incoming, dict):
+                        if item.get("value", {}).get("select") == incoming.get("select"):
+                            score += 100
+                except Exception:
+                    pass
                 for k, v in incoming.items():
                     try:
                         if item.get("value", {}).get(k) == v:
@@ -197,7 +204,10 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
 
         # Construct new ordered list where position i corresponds to incoming i,
         # using the matched stored item (with non-value fields preserved) but
-        # replacing its nested `value` with the incoming dict.
+        # replacing its nested `value` with the incoming dict. Also update
+        # the stored item's `type` when the incoming value includes a
+        # 'select' discriminator (e.g. 'song' vs 'hymn') so callers relying on
+        # `type` behavior can observe the intended semantics.
         new_data = []
         for i in range(len(values_list)):
             j = mapping[i]
@@ -206,6 +216,15 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
             if isinstance(item, dict):
                 new_item = dict(item)
                 new_item["value"] = values_list[i]
+                # If incoming value includes a 'select' field, reflect that
+                # in the stored item's `type` where appropriate.
+                try:
+                    if isinstance(values_list[i], dict) and "select" in values_list[i]:
+                        sel = values_list[i].get("select")
+                        if isinstance(sel, str) and sel:
+                            new_item["type"] = sel
+                except Exception:
+                    pass
             else:
                 new_item = {"value": values_list[i]} if isinstance(values_list[i], dict) else values_list[i]
             new_data.append(new_item)
