@@ -204,10 +204,7 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
 
         # Construct new ordered list where position i corresponds to incoming i,
         # using the matched stored item (with non-value fields preserved) but
-        # replacing its nested `value` with the incoming dict. Also update
-        # the stored item's `type` when the incoming value includes a
-        # 'select' discriminator (e.g. 'song' vs 'hymn') so callers relying on
-        # `type` behavior can observe the intended semantics.
+        # replacing its nested `value` with the incoming dict.
         new_data = []
         for i in range(len(values_list)):
             j = mapping[i]
@@ -216,15 +213,6 @@ def update_service_field_by_date(db, service_type: str, date: str, values_list: 
             if isinstance(item, dict):
                 new_item = dict(item)
                 new_item["value"] = values_list[i]
-                # If incoming value includes a 'select' field, reflect that
-                # in the stored item's `type` where appropriate.
-                try:
-                    if isinstance(values_list[i], dict) and "select" in values_list[i]:
-                        sel = values_list[i].get("select")
-                        if isinstance(sel, str) and sel:
-                            new_item["type"] = sel
-                except Exception:
-                    pass
             else:
                 new_item = {"value": values_list[i]} if isinstance(values_list[i], dict) else values_list[i]
             new_data.append(new_item)
